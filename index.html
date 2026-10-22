@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>FreeTier Radar — the free AI API index</title>
+<meta name="description" content="A curated, searchable index of AI providers that offer free or trial API access: free tiers, free model routes, trial credits and local runtimes. No third-party keys collected." />
+<meta name="theme-color" content="#08090c" />
+<meta property="og:title" content="FreeTier Radar — the free AI API index" />
+<meta property="og:description" content="Every free AI API tier, in one searchable index." />
+<meta property="og:type" content="website" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2308090c'/%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='%235ef2a8' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%235ef2a8'/%3E%3C/svg%3E" />
+<link rel="stylesheet" href="assets/styles.css" />
+</head>
+<body>
+<div class="bg-field" aria-hidden="true"></div>
+
+<header class="topbar">
+  <a class="brand" href="./" aria-label="FreeTier Radar home">
+    <span class="brand-mark" aria-hidden="true">
+      <svg viewBox="0 0 32 32" width="26" height="26">
+        <circle cx="16" cy="16" r="12" fill="none" stroke="currentColor" stroke-width="1.4" opacity=".35"/>
+        <circle cx="16" cy="16" r="7" fill="none" stroke="currentColor" stroke-width="1.4" opacity=".65"/>
+        <circle cx="16" cy="16" r="2.2" fill="currentColor"/>
+        <path d="M16 4v4M16 24v4M4 16h4M24 16h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" opacity=".8"/>
+      </svg>
+    </span>
+    <span class="brand-text">FreeTier<span class="brand-dim">Radar</span></span>
+  </a>
+
+  <div class="topbar-actions">
+    <span class="build-stamp" id="buildStamp" title="Dataset build date"></span>
+    <button class="icon-btn" id="themeBtn" type="button" aria-label="Toggle colour theme" title="Toggle theme">
+      <svg class="i-sun" viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 2.6v2.4M12 19v2.4M2.6 12H5M19 12h2.4M5.4 5.4l1.7 1.7M16.9 16.9l1.7 1.7M18.6 5.4l-1.7 1.7M7.1 16.9l-1.7 1.7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      <svg class="i-moon" viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M20 14.2A8.2 8.2 0 019.8 4 8.4 8.4 0 1020 14.2z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+    </button>
+    <a class="gh-btn" href="https://github.com" id="repoLink" target="_blank" rel="noopener" aria-label="View source on GitHub">
+      <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 012-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A7.995 7.995 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      <span>Source</span>
+    </a>
+  </div>
+</header>
+
+<main class="shell">
+
+  <section class="hero">
+    <div class="hero-copy">
+      <p class="eyebrow"><span class="pulse" aria-hidden="true"></span>Index updated <time id="heroDate">—</time></p>
+      <h1>Every free AI&nbsp;API,<br /><span class="accent">in one index.</span></h1>
+      <p class="lede">
+        A curated map of providers that give away model access — recurring free tiers,
+        zero-cost model routes, one-off trial credits and runtimes you host yourself.
+        Compare quotas side by side, then go get your own key.
+      </p>
+      <div class="hero-stats" id="heroStats" aria-label="Dataset summary"></div>
+    </div>
+
+    <aside class="hero-note" aria-label="How this works">
+      <h2>What this is not</h2>
+      <p>
+        This index never collects, proxies or shares third-party credentials.
+        Every entry links to the provider's own signup page, and the key tester
+        only ever talks to the provider directly from your browser.
+      </p>
+      <ul class="note-list">
+        <li><span class="dot dot-green"></span>Always-free = renewing allowance</li>
+        <li><span class="dot dot-blue"></span>Free models = zero-cost routes</li>
+        <li><span class="dot dot-amber"></span>Trial = one-off credits</li>
+        <li><span class="dot dot-grey"></span>Local = runs on your hardware</li>
+      </ul>
+    </aside>
+  </section>
+
+  <section class="controls" aria-label="Search and filters">
+    <div class="search-row">
+      <div class="search-box">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" class="search-icon"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M15.5 15.5L21 21" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        <input id="search" type="search" placeholder="Search providers, models, capabilities…" autocomplete="off" spellcheck="false" aria-label="Search providers" />
+        <kbd class="kbd-hint" aria-hidden="true">/</kbd>
+        <button class="clear-btn" id="clearSearch" type="button" aria-label="Clear search" hidden>&times;</button>
+      </div>
+
+      <div class="view-group" role="group" aria-label="View mode">
+        <button class="seg is-active" data-view="grid" type="button" aria-pressed="true">
+          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><rect x="3" y="3" width="7.5" height="7.5" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>
+          <span>Cards</span>
+        </button>
+        <button class="seg" data-view="table" type="button" aria-pressed="false">
+          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+          <span>Table</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="filter-row">
+      <div class="chips" id="accessChips" role="group" aria-label="Filter by access type"></div>
+      <div class="chips" id="flagChips" role="group" aria-label="Filter by attribute"></div>
+      <div class="spacer"></div>
+      <label class="select-wrap">
+        <span class="sr-only">Sort results</span>
+        <select id="sort">
+          <option value="relevance">Sort: Relevance</option>
+          <option value="name">Sort: Name A–Z</option>
+          <option value="rpd">Sort: Daily requests</option>
+          <option value="rpm">Sort: Requests / min</option>
+          <option value="verified">Sort: Recently verified</option>
+        </select>
+      </label>
+      <button class="ghost-btn" id="exportBtn" type="button" title="Download the current result set as CSV">
+        <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M12 3v12m0 0l-4.2-4.2M12 15l4.2-4.2M4 20h16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>CSV</span>
+      </button>
+    </div>
+
+    <div class="result-bar">
+      <p class="result-count" id="resultCount" role="status" aria-live="polite"></p>
+      <button class="link-btn" id="resetBtn" type="button" hidden>Reset filters</button>
+    </div>
+  </section>
+
+  <section id="results" aria-label="Results">
+    <div id="grid" class="card-grid"></div>
+
+    <div id="tableWrap" class="table-wrap" hidden>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th scope="col">Provider</th>
+            <th scope="col">Access</th>
+            <th scope="col" class="num">RPM</th>
+            <th scope="col" class="num">RPD</th>
+            <th scope="col">Limits</th>
+            <th scope="col" class="center">OpenAI</th>
+            <th scope="col" class="center">Card</th>
+            <th scope="col">Verified</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+
+    <div id="emptyState" class="empty" hidden>
+      <svg viewBox="0 0 24 24" width="34" height="34" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="1.4" opacity=".5"/><path d="M16.2 16.2L21 21" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" opacity=".5"/></svg>
+      <h3>No providers match</h3>
+      <p id="emptyHint">Try a different term, or clear the active filters.</p>
+      <button class="primary-btn" id="emptyReset" type="button">Clear everything</button>
+    </div>
+
+    <div id="loadError" class="empty" hidden>
+      <h3>Dataset could not be loaded</h3>
+      <p>
+        The provider index is loaded over HTTP. If you opened this file directly from disk,
+        serve the folder instead — for example <code>python -m http.server 8080</code> —
+        then visit <code>http://localhost:8080</code>.
+      </p>
+    </div>
+  </section>
+
+  <footer class="site-foot">
+    <div class="foot-main">
+      <p>
+        <strong>Verify before you build.</strong> Free-tier terms change frequently and several providers
+        revised limits during 2026. Every figure here was transcribed from official documentation on the
+        date shown on each entry; treat it as a starting point, not a contract.
+      </p>
+      <p class="foot-dim">
+        FreeTier Radar is an independent directory. It is not affiliated with any listed provider and
+        does not host, resell or distribute API credentials.
+      </p>
+    </div>
+    <div class="foot-links">
+      <a href="./data/providers.json" target="_blank" rel="noopener">Raw dataset (JSON)</a>
+      <a href="https://github.com" id="repoLinkFoot" target="_blank" rel="noopener">Contribute</a>
+    </div>
+  </footer>
+</main>
+
+<!-- Detail panel -->
+<div class="scrim" id="scrim" hidden></div>
+<aside class="panel" id="panel" role="dialog" aria-modal="true" aria-labelledby="panelTitle" hidden>
+  <div class="panel-head">
+    <div class="panel-head-main">
+      <span class="panel-badge" id="panelBadge"></span>
+      <h2 id="panelTitle"></h2>
+      <p id="panelVendor" class="panel-vendor"></p>
+    </div>
+    <button class="icon-btn panel-close" id="panelClose" type="button" aria-label="Close details">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </button>
+  </div>
+  <div class="panel-body" id="panelBody"></div>
+</aside>
+
+<template id="tpl-card">
+  <article class="card" tabindex="0" role="button">
+    <div class="card-top">
+      <div class="card-id">
+        <h3 class="card-name"></h3>
+        <p class="card-vendor"></p>
+      </div>
+      <div class="card-top-right">
+        <span class="badge"></span>
+        <button class="fav-btn" type="button" aria-label="Save provider" aria-pressed="false">
+          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M12 3.6l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8L3.6 9.7l5.8-.8L12 3.6z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+    </div>
+    <p class="card-summary"></p>
+    <div class="card-metrics"></div>
+    <div class="card-models"></div>
+    <div class="card-foot">
+      <span class="card-verified"></span>
+      <span class="card-cta">Details <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+    </div>
+  </article>
+</template>
+
+<script src="assets/app.js" type="module"></script>
+</body>
+</html>

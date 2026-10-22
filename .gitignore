@@ -1,0 +1,20 @@
+# OS noise
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# Node (not required to run the site, but common when previewing)
+node_modules/
+npm-debug.log*
+
+# Local scratch files
+__lighttest.html
+*.local
+
+# WorkBuddy project metadata — not part of the app
+.workbuddy-ai/
