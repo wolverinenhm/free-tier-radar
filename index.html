@@ -53,6 +53,7 @@
         Compare quotas side by side, then go get your own key.
       </p>
       <div class="hero-stats" id="heroStats" aria-label="Dataset summary"></div>
+      <p class="freshness-notice" id="freshnessNotice" role="status" aria-live="polite"></p>
     </div>
 
     <aside class="hero-note" aria-label="How this works">
@@ -148,6 +149,7 @@
 
     <div id="loadError" class="empty" hidden>
       <h3>Dataset could not be loaded</h3>
+      <p id="loadErrorMessage"></p>
       <p>
         The provider index is loaded over HTTP. If you opened this file directly from disk,
         serve the folder instead — for example <code>python -m http.server 8080</code> —

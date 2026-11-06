@@ -3,7 +3,10 @@
    Vanilla ES modules, no dependencies, no build step.
    ============================================================ */
 
+import { daysSince, keyTestSupport, validateDataset } from "./dataset.mjs";
+
 const DATA_URL = "data/providers.json";
+const STALE_AFTER_DAYS = 30;
 const LS_THEME = "ftr:theme";
 const LS_FAVS = "ftr:favs";
 
@@ -53,6 +56,8 @@ const el = {
   heroStats: $("#heroStats"),
   heroDate: $("#heroDate"),
   buildStamp: $("#buildStamp"),
+  freshnessNotice: $("#freshnessNotice"),
+  loadErrorMessage: $("#loadErrorMessage"),
   panel: $("#panel"),
   panelBody: $("#panelBody"),
   panelTitle: $("#panelTitle"),
@@ -265,8 +270,9 @@ function renderCards(list) {
       .map((m) => `<span class="model-tag">${esc(m)}</span>`)
       .join("");
 
+    const verificationAge = daysSince(p.verified);
     node.querySelector(".card-verified").innerHTML =
-      `<span class="conf-dot conf-${esc(p.confidence || "low")}"></span>verified ${esc(fmtDate(p.verified))}`;
+      `<span class="conf-dot conf-${esc(p.confidence)}"></span>verified ${esc(fmtDate(p.verified))}${verificationAge > STALE_AFTER_DAYS ? '<span class="stale-label"> · review due</span>' : ""}`;
 
     frag.appendChild(node);
   }
@@ -286,7 +292,7 @@ function renderTable(list) {
       <td class="t-limits">${esc(p.limits?.text || "—")}</td>
       <td class="center">${p.openaiCompatible ? '<span class="tick">✓</span>' : '<span class="cross">—</span>'}</td>
       <td class="center">${p.creditCard ? '<span class="cross">required</span>' : '<span class="tick">none</span>'}</td>
-      <td class="t-limits">${esc(p.verified)}</td>
+      <td class="t-limits">${esc(fmtDate(p.verified))}${daysSince(p.verified) > STALE_AFTER_DAYS ? ' <span class="stale-label">review due</span>' : ""}</td>
     </tr>`).join("");
 }
 
@@ -335,7 +341,12 @@ function renderStats() {
 
   const updated = state.meta.updated || "";
   el.heroDate.textContent = fmtDate(updated);
-  el.buildStamp.textContent = `v${state.meta.version || "1.0"} · ${updated}`;
+  el.buildStamp.textContent = `v${state.meta.version} · ${updated}`;
+  const age = daysSince(updated);
+  el.freshnessNotice.textContent = age > STALE_AFTER_DAYS
+    ? `Provider data was last updated ${fmtDate(updated)} (${age} days ago). Terms may have changed; check the provider's official docs.`
+    : `Provider data last updated ${fmtDate(updated)}. Confirm current terms with the provider before relying on a quota.`;
+  el.freshnessNotice.classList.toggle("is-stale", age > STALE_AFTER_DAYS);
 }
 
 function setView(view) {
@@ -449,13 +460,18 @@ function limitTiles(p) {
 }
 
 let activeProvider = null;
+let panelOpener = null;
+let panelOpenerId = null;
+let keyTestController = null;
 let snippetTab = "curl";
 
-function openPanel(id, pushHash = true) {
+function openPanel(id, pushHash = true, opener = null) {
   const p = state.all.find((x) => x.id === id);
   if (!p) return;
 
   activeProvider = p;
+  panelOpener = opener;
+  panelOpenerId = id;
   snippetTab = "curl";
 
   el.panelBadge.textContent = ACCESS[p.access]?.label || p.access;
@@ -522,24 +538,22 @@ function openPanel(id, pushHash = true) {
     <div class="p-section">
       <h3>Test your own key</h3>
       <div class="tester">
-        <div class="tester-head">
-          <span class="tester-title">Live check against <code>${esc(p.apiBase)}/models</code></span>
-        </div>
-        <div class="tester-row">
-          <input type="password" data-key-input placeholder="Paste your ${esc(p.name)} API key" autocomplete="off" spellcheck="false" />
-          <button class="test-btn" type="button" data-test>Test</button>
-        </div>
-        <div class="test-result" data-test-result></div>
-        <p class="tester-hint">
-          The request goes from your browser straight to ${esc(p.vendor)}. The key is held in memory only,
-          never written to storage, and discarded when you close this panel. Some providers block
-          browser-origin requests via CORS — a CORS failure here does not mean your key is invalid.
-        </p>
+        ${(() => {
+          const support = keyTestSupport(p, location.protocol);
+          if (!support.endpoint) return `<p class="tester-hint">${esc(support.reason)}</p>`;
+          return `<div class="tester-head"><span class="tester-title">Browser check: <code>${esc(support.endpoint)}</code></span></div>
+            <div class="tester-row">
+              <input type="password" data-key-input placeholder="Paste your ${esc(p.name)} API key" autocomplete="off" spellcheck="false" />
+              <button class="test-btn" type="button" data-test>Test</button>
+            </div>
+            <div class="test-result" data-test-result></div>
+            <p class="tester-hint">The request goes directly from your browser to ${esc(p.vendor)}. The key is held in memory only and cleared when this panel closes. Providers may block browser requests via CORS; that does not mean your key is invalid.</p>`;
+        })()}
       </div>
     </div>
 
     <div class="p-meta">
-      <span>verified ${esc(fmtDate(p.verified))}</span>
+      <span>verified ${esc(fmtDate(p.verified))}${daysSince(p.verified) > STALE_AFTER_DAYS ? " · review due" : ""}</span>
       <span>confidence: ${esc(p.confidence)}</span>
       <span>id: ${esc(p.id)}</span>
     </div>`;
@@ -567,12 +581,19 @@ function closePanel() {
   const keyInput = el.panelBody.querySelector("[data-key-input]");
   if (keyInput) keyInput.value = "";
   el.panelBody.innerHTML = "";
+  keyTestController?.abort();
+  keyTestController = null;
   history.replaceState(null, "", location.pathname + location.search);
+  const opener = panelOpener?.isConnected ? panelOpener :
+    [...document.querySelectorAll(".card[data-id], tr[data-id]")].find((item) => item.dataset.id === panelOpenerId);
+  if (opener?.isConnected) opener.focus({ preventScroll: true });
+  panelOpener = null;
+  panelOpenerId = null;
 }
 
 /* ---------- key tester ---------- */
 
-async function testKey(provider, key) {
+async function testKey(provider, key, endpoint) {
   const result = el.panelBody.querySelector("[data-test-result]");
   const btn = el.panelBody.querySelector("[data-test]");
   if (!result || !btn) return;
@@ -583,15 +604,17 @@ async function testKey(provider, key) {
   };
 
   if (!key) { show("err", "Enter a key first."); return; }
+  if (!endpoint) { show("err", "This provider cannot be safely tested with the generic browser check."); return; }
 
   btn.disabled = true;
   show("busy", "Contacting provider…");
 
   const controller = new AbortController();
+  keyTestController = controller;
   const timer = setTimeout(() => controller.abort(), 12000);
 
   try {
-    const res = await fetch(`${provider.apiBase}/models`, {
+    const res = await fetch(endpoint, {
       method: "GET",
       headers: { Authorization: `Bearer ${key}` },
       signal: controller.signal
@@ -621,6 +644,7 @@ async function testKey(provider, key) {
     }
   } finally {
     clearTimeout(timer);
+    if (keyTestController === controller) keyTestController = null;
     btn.disabled = false;
   }
 }
@@ -725,7 +749,7 @@ function wireEvents() {
       return;
     }
     const card = e.target.closest(".card");
-    if (card) openPanel(card.dataset.id);
+    if (card) openPanel(card.dataset.id, true, card);
   });
 
   el.grid.addEventListener("keydown", (e) => {
@@ -733,17 +757,17 @@ function wireEvents() {
     const card = e.target.closest(".card");
     if (!card || e.target.closest("[data-fav]")) return;
     e.preventDefault();
-    openPanel(card.dataset.id);
+    openPanel(card.dataset.id, true, card);
   });
 
   el.tableBody.addEventListener("click", (e) => {
     const row = e.target.closest("tr[data-id]");
-    if (row) openPanel(row.dataset.id);
+    if (row) openPanel(row.dataset.id, true, row);
   });
   el.tableBody.addEventListener("keydown", (e) => {
     if (e.key !== "Enter") return;
     const row = e.target.closest("tr[data-id]");
-    if (row) openPanel(row.dataset.id);
+    if (row) openPanel(row.dataset.id, true, row);
   });
 
   el.panelClose.addEventListener("click", closePanel);
@@ -783,14 +807,16 @@ function wireEvents() {
     const test = e.target.closest("[data-test]");
     if (test && activeProvider) {
       const input = el.panelBody.querySelector("[data-key-input]");
-      testKey(activeProvider, input?.value.trim() || "");
+      const support = keyTestSupport(activeProvider, location.protocol);
+      testKey(activeProvider, input?.value.trim() || "", support.endpoint);
     }
   });
 
   el.panelBody.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && e.target.matches("[data-key-input]") && activeProvider) {
       e.preventDefault();
-      testKey(activeProvider, e.target.value.trim());
+      const support = keyTestSupport(activeProvider, location.protocol);
+      testKey(activeProvider, e.target.value.trim(), support.endpoint);
     }
   });
 
@@ -848,11 +874,14 @@ async function boot() {
     const res = await fetch(DATA_URL, { cache: "no-cache" });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
-    state.all = Array.isArray(json.providers) ? json.providers : [];
-    state.meta = json.meta || {};
+    const validationErrors = validateDataset(json);
+    if (validationErrors.length) throw new Error(validationErrors.join(" "));
+    state.all = json.providers;
+    state.meta = json.meta;
   } catch (err) {
     console.error("Dataset load failed:", err);
     el.loadError.hidden = false;
+    el.loadErrorMessage.textContent = `The provider dataset could not be loaded or is invalid: ${err.message}`;
     el.resultCount.textContent = "dataset unavailable";
     return;
   }

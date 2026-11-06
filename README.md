@@ -33,7 +33,7 @@ There is no scraping of third-party credentials, no key pooling, and no proxying
 | Attribute filters | OpenAI-compatible, no credit card, saved providers |
 | Two views | Card grid for browsing, dense table for comparing quotas side by side |
 | Detail panel | Full limits, model list, copy-ready cURL / Python / Node snippets, provider notes |
-| Key tester | Paste **your own** key to verify it against the provider's `/models` endpoint from your browser |
+| Key tester | Paste **your own** key for a direct browser check when the provider supports the generic endpoint; unsupported, placeholder, and mixed-content endpoints are disabled with an explanation |
 | CSV export | Downloads the current filtered result set |
 | Deep links | `#groq` opens a provider directly; `?view=table` opens the comparison table |
 | Theme | Dark by default, light available, both respect `prefers-reduced-motion` |
@@ -48,7 +48,9 @@ python -m http.server 8080
 # then open http://localhost:8080
 ```
 
-Any static server works — `npx serve`, `caddy file-server`, nginx, or GitHub Pages.
+Any static server works — `npx serve`, `caddy file-server`, nginx, or GitHub Pages. Provider data is checked for required fields and consistency at startup. The page labels dataset updates older than 30 days and marks individual entries whose verification date is older than 30 days; dates are not automatically refreshed, so confirm offers in the provider's docs.
+
+The browser key check only runs for OpenAI-compatible endpoints without URL placeholders. It is disabled for native APIs and for HTTP endpoints when the page itself is served over HTTPS. CORS may still block a direct browser request. Keys are not stored, and closing the provider panel cancels an in-flight check.
 
 ## Deploy to GitHub Pages
 
@@ -59,7 +61,7 @@ This is a static site with no build step, so Pages serves the repository root di
 3. Set **Source** to *Deploy from a branch*, branch `main`, folder `/ (root)`.
 4. Save. The site is published at `https://<user>.github.io/<repo>/` within about a minute.
 
-Every push to `main` redeploys automatically. No CI, no build artefacts, no secrets.
+Every push to `main` redeploys automatically. No CI, no build artefacts, no secrets. Run the dependency-free dataset tests with `node --test tests/dataset.test.mjs`.
 
 ## Dataset schema
 
@@ -118,8 +120,10 @@ Guidelines: one entry per provider, no affiliate or referral links, and no entri
 ```
 index.html              markup and templates
 assets/styles.css       design system, dark and light themes
-assets/app.js           search, filtering, panel, key tester (vanilla ES modules)
+assets/app.js           search, filtering, panel, guarded key tester (vanilla ES modules)
+assets/dataset.mjs      provider dataset validation and date helpers
 data/providers.json     the dataset
+tests/dataset.test.mjs dependency-free validation tests
 ```
 
 ## Licence
