@@ -3,7 +3,7 @@
    Vanilla ES modules, no dependencies, no build step.
    ============================================================ */
 
-import { daysSince, keyTestSupport, validateDataset } from "./dataset.mjs";
+import { daysSince, keyTestSupport, loadDataset } from "./dataset.mjs";
 
 const DATA_URL = "data/providers.json";
 const STALE_AFTER_DAYS = 30;
@@ -213,7 +213,7 @@ function renderChips() {
   const flagCounts = {
     openai: INDEX.filter((i) => i.ref.openaiCompatible && passes(i.ref, { ignoreFlag: "openai" })).length,
     nocard: INDEX.filter((i) => !i.ref.creditCard && passes(i.ref, { ignoreFlag: "nocard" })).length,
-    fav: state.favs.size
+    fav: INDEX.filter((i) => state.favs.has(i.ref.id) && passes(i.ref, { ignoreFlag: "fav" })).length
   };
 
   el.flagChips.innerHTML = Object.entries(FLAGS).map(([key, cfg]) => `
@@ -351,6 +351,10 @@ function renderStats() {
 
 function setView(view) {
   state.view = view === "table" ? "table" : "grid";
+  const url = new URL(location.href);
+  if (state.view === "table") url.searchParams.set("view", "table");
+  else url.searchParams.delete("view");
+  if (url.href !== location.href) history.replaceState(null, "", url);
   document.querySelectorAll("[data-view]").forEach((b) => {
     const on = b.dataset.view === state.view;
     b.classList.toggle("is-active", on);
@@ -374,7 +378,9 @@ function snippetModel(p) {
 function codeSamples(p) {
   const base = p.apiBase;
   const model = snippetModel(p);
-  const key = p.access === "local" ? (p.id === "lm-studio" ? "lm-studio" : "ollama") : "YOUR_API_KEY";
+  // Local runtimes ignore the key but the OpenAI SDKs refuse to start without one.
+  const LOCAL_KEYS = { ollama: "ollama", "lm-studio": "lm-studio", vllm: "EMPTY" };
+  const key = p.access === "local" ? (LOCAL_KEYS[p.id] || "not-needed") : "YOUR_API_KEY";
 
   if (!p.openaiCompatible) {
     return {
@@ -396,7 +402,7 @@ print(res.message.content[0].text)`,
       js: `const res = await fetch("${base}/chat", {
   method: "POST",
   headers: {
-    Authorization: \`Bearer \${process.env.${key === "YOUR_API_KEY" ? "API_KEY" : "API_KEY"}}\`,
+    Authorization: \`Bearer \${process.env.API_KEY}\`,
     "Content-Type": "application/json",
   },
   body: JSON.stringify({
@@ -469,6 +475,8 @@ function openPanel(id, pushHash = true, opener = null) {
   const p = state.all.find((x) => x.id === id);
   if (!p) return;
 
+  keyTestController?.abort(); // a check started for the previous provider is no longer relevant
+  keyTestController = null;
   activeProvider = p;
   panelOpener = opener;
   panelOpenerId = id;
@@ -664,8 +672,10 @@ function exportCsv() {
     "openai_compatible", "credit_card_required", "regions", "api_base", "signup", "docs", "verified", "confidence"];
 
   const cell = (v) => {
-    const s = String(v ?? "");
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    let s = String(v ?? "");
+    // Neutralise spreadsheet formula injection (cells starting with = + - @).
+    if (/^[=+\-@]/.test(s)) s = `'${s}`;
+    return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
 
   const rows = [cols.join(",")];
@@ -678,13 +688,18 @@ function exportCsv() {
     ].map(cell).join(","));
   }
 
-  const blob = new Blob([rows.join("\n")], { type: "text/csv;charset=utf-8" });
+  // BOM so Excel opens the UTF-8 file (·, —, CJK model names) correctly; CRLF per RFC 4180.
+  const blob = new Blob(["\uFEFF", rows.join("\r\n")], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
   a.download = `freetier-radar-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.hidden = true;
+  document.body.appendChild(a); // Firefox ignores clicks on detached anchors
   a.click();
-  URL.revokeObjectURL(url);
+  a.remove();
+  // Revoking synchronously can cancel the download before it starts.
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 /* ---------- events ---------- */
@@ -874,10 +889,12 @@ async function boot() {
     const res = await fetch(DATA_URL, { cache: "no-cache" });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
-    const validationErrors = validateDataset(json);
-    if (validationErrors.length) throw new Error(validationErrors.join(" "));
-    state.all = json.providers;
-    state.meta = json.meta;
+    const { providers, meta, warnings, fatal } = loadDataset(json);
+    if (fatal.length) throw new Error(fatal.join(" "));
+    // A single malformed entry is skipped rather than taking the whole index down.
+    if (warnings.length) console.warn(`Dataset has ${warnings.length} problem(s):\n${warnings.join("\n")}`);
+    state.all = providers;
+    state.meta = meta;
   } catch (err) {
     console.error("Dataset load failed:", err);
     el.loadError.hidden = false;
@@ -894,9 +911,18 @@ async function boot() {
   const params = new URLSearchParams(location.search);
   setView(params.get("view"));
 
-  // deep link: #groq
-  const id = location.hash.replace(/^#/, "");
-  if (id && state.all.some((p) => p.id === id)) openPanel(id, false);
+  // deep link: #groq — also follow later hash changes (links, back/forward)
+  syncPanelToHash();
+  window.addEventListener("hashchange", syncPanelToHash);
+}
+
+function syncPanelToHash() {
+  const id = decodeURIComponent(location.hash.replace(/^#/, ""));
+  if (id && state.all.some((p) => p.id === id)) {
+    if (activeProvider?.id !== id) openPanel(id, false);
+  } else if (!el.panel.hidden) {
+    closePanel();
+  }
 }
 
 boot();

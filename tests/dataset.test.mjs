@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { daysSince, keyTestSupport, validateDataset } from "../assets/dataset.mjs";
+import { daysSince, keyTestSupport, loadDataset, validateDataset } from "../assets/dataset.mjs";
 
 const source = JSON.parse(await readFile(new URL("../data/providers.json", import.meta.url), "utf8"));
 
@@ -43,4 +43,24 @@ test("freshness age uses calendar days and rejects invalid dates", () => {
   assert.equal(daysSince("2026-11-06", now), 1);
   assert.equal(daysSince("2026-11-09", now), -2);
   assert.equal(daysSince("not-a-date", now), null);
+});
+
+test("one malformed provider is skipped instead of breaking the whole index", () => {
+  const data = structuredClone(source);
+  data.providers[0].access = "free-ish";
+  data.providers.push(structuredClone(data.providers[1])); // duplicate id
+  const { providers, warnings, fatal } = loadDataset(data);
+
+  assert.deepEqual(fatal, []);
+  assert.equal(providers.length, source.providers.length - 1);
+  assert.ok(!providers.some((p) => p.id === source.providers[0].id));
+  assert.match(warnings.join(" "), /invalid access type/);
+  assert.match(warnings.join(" "), /Duplicate provider id/);
+});
+
+test("structurally broken datasets are fatal", () => {
+  assert.notDeepEqual(loadDataset({ meta: {}, providers: [] }).fatal, []);
+  assert.notDeepEqual(loadDataset(null).fatal, []);
+  const allBad = { ...structuredClone(source), providers: [{ id: "x" }] };
+  assert.match(loadDataset(allBad).fatal.join(" "), /No provider entry passed/);
 });
