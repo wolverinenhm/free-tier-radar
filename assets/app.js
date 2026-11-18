@@ -3,7 +3,10 @@
    Vanilla ES modules, no dependencies, no build step.
    ============================================================ */
 
+import { daysSince, keyTestSupport, loadDataset } from "./dataset.mjs";
+
 const DATA_URL = "data/providers.json";
+const STALE_AFTER_DAYS = 30;
 const LS_THEME = "ftr:theme";
 const LS_FAVS = "ftr:favs";
 
@@ -53,6 +56,8 @@ const el = {
   heroStats: $("#heroStats"),
   heroDate: $("#heroDate"),
   buildStamp: $("#buildStamp"),
+  freshnessNotice: $("#freshnessNotice"),
+  loadErrorMessage: $("#loadErrorMessage"),
   panel: $("#panel"),
   panelBody: $("#panelBody"),
   panelTitle: $("#panelTitle"),
@@ -208,7 +213,7 @@ function renderChips() {
   const flagCounts = {
     openai: INDEX.filter((i) => i.ref.openaiCompatible && passes(i.ref, { ignoreFlag: "openai" })).length,
     nocard: INDEX.filter((i) => !i.ref.creditCard && passes(i.ref, { ignoreFlag: "nocard" })).length,
-    fav: state.favs.size
+    fav: INDEX.filter((i) => state.favs.has(i.ref.id) && passes(i.ref, { ignoreFlag: "fav" })).length
   };
 
   el.flagChips.innerHTML = Object.entries(FLAGS).map(([key, cfg]) => `
@@ -265,8 +270,9 @@ function renderCards(list) {
       .map((m) => `<span class="model-tag">${esc(m)}</span>`)
       .join("");
 
+    const verificationAge = daysSince(p.verified);
     node.querySelector(".card-verified").innerHTML =
-      `<span class="conf-dot conf-${esc(p.confidence || "low")}"></span>verified ${esc(fmtDate(p.verified))}`;
+      `<span class="conf-dot conf-${esc(p.confidence)}"></span>verified ${esc(fmtDate(p.verified))}${verificationAge > STALE_AFTER_DAYS ? '<span class="stale-label"> · review due</span>' : ""}`;
 
     frag.appendChild(node);
   }
@@ -286,7 +292,7 @@ function renderTable(list) {
       <td class="t-limits">${esc(p.limits?.text || "—")}</td>
       <td class="center">${p.openaiCompatible ? '<span class="tick">✓</span>' : '<span class="cross">—</span>'}</td>
       <td class="center">${p.creditCard ? '<span class="cross">required</span>' : '<span class="tick">none</span>'}</td>
-      <td class="t-limits">${esc(p.verified)}</td>
+      <td class="t-limits">${esc(fmtDate(p.verified))}${daysSince(p.verified) > STALE_AFTER_DAYS ? ' <span class="stale-label">review due</span>' : ""}</td>
     </tr>`).join("");
 }
 
@@ -335,11 +341,20 @@ function renderStats() {
 
   const updated = state.meta.updated || "";
   el.heroDate.textContent = fmtDate(updated);
-  el.buildStamp.textContent = `v${state.meta.version || "1.0"} · ${updated}`;
+  el.buildStamp.textContent = `v${state.meta.version} · ${updated}`;
+  const age = daysSince(updated);
+  el.freshnessNotice.textContent = age > STALE_AFTER_DAYS
+    ? `Provider data was last updated ${fmtDate(updated)} (${age} days ago). Terms may have changed; check the provider's official docs.`
+    : `Provider data last updated ${fmtDate(updated)}. Confirm current terms with the provider before relying on a quota.`;
+  el.freshnessNotice.classList.toggle("is-stale", age > STALE_AFTER_DAYS);
 }
 
 function setView(view) {
   state.view = view === "table" ? "table" : "grid";
+  const url = new URL(location.href);
+  if (state.view === "table") url.searchParams.set("view", "table");
+  else url.searchParams.delete("view");
+  if (url.href !== location.href) history.replaceState(null, "", url);
   document.querySelectorAll("[data-view]").forEach((b) => {
     const on = b.dataset.view === state.view;
     b.classList.toggle("is-active", on);
@@ -363,7 +378,9 @@ function snippetModel(p) {
 function codeSamples(p) {
   const base = p.apiBase;
   const model = snippetModel(p);
-  const key = p.access === "local" ? (p.id === "lm-studio" ? "lm-studio" : "ollama") : "YOUR_API_KEY";
+  // Local runtimes ignore the key but the OpenAI SDKs refuse to start without one.
+  const LOCAL_KEYS = { ollama: "ollama", "lm-studio": "lm-studio", vllm: "EMPTY" };
+  const key = p.access === "local" ? (LOCAL_KEYS[p.id] || "not-needed") : "YOUR_API_KEY";
 
   if (!p.openaiCompatible) {
     return {
@@ -385,7 +402,7 @@ print(res.message.content[0].text)`,
       js: `const res = await fetch("${base}/chat", {
   method: "POST",
   headers: {
-    Authorization: \`Bearer \${process.env.${key === "YOUR_API_KEY" ? "API_KEY" : "API_KEY"}}\`,
+    Authorization: \`Bearer \${process.env.API_KEY}\`,
     "Content-Type": "application/json",
   },
   body: JSON.stringify({
@@ -449,13 +466,20 @@ function limitTiles(p) {
 }
 
 let activeProvider = null;
+let panelOpener = null;
+let panelOpenerId = null;
+let keyTestController = null;
 let snippetTab = "curl";
 
-function openPanel(id, pushHash = true) {
+function openPanel(id, pushHash = true, opener = null) {
   const p = state.all.find((x) => x.id === id);
   if (!p) return;
 
+  keyTestController?.abort(); // a check started for the previous provider is no longer relevant
+  keyTestController = null;
   activeProvider = p;
+  panelOpener = opener;
+  panelOpenerId = id;
   snippetTab = "curl";
 
   el.panelBadge.textContent = ACCESS[p.access]?.label || p.access;
@@ -522,24 +546,22 @@ function openPanel(id, pushHash = true) {
     <div class="p-section">
       <h3>Test your own key</h3>
       <div class="tester">
-        <div class="tester-head">
-          <span class="tester-title">Live check against <code>${esc(p.apiBase)}/models</code></span>
-        </div>
-        <div class="tester-row">
-          <input type="password" data-key-input placeholder="Paste your ${esc(p.name)} API key" autocomplete="off" spellcheck="false" />
-          <button class="test-btn" type="button" data-test>Test</button>
-        </div>
-        <div class="test-result" data-test-result></div>
-        <p class="tester-hint">
-          The request goes from your browser straight to ${esc(p.vendor)}. The key is held in memory only,
-          never written to storage, and discarded when you close this panel. Some providers block
-          browser-origin requests via CORS — a CORS failure here does not mean your key is invalid.
-        </p>
+        ${(() => {
+          const support = keyTestSupport(p, location.protocol);
+          if (!support.endpoint) return `<p class="tester-hint">${esc(support.reason)}</p>`;
+          return `<div class="tester-head"><span class="tester-title">Browser check: <code>${esc(support.endpoint)}</code></span></div>
+            <div class="tester-row">
+              <input type="password" data-key-input placeholder="Paste your ${esc(p.name)} API key" autocomplete="off" spellcheck="false" />
+              <button class="test-btn" type="button" data-test>Test</button>
+            </div>
+            <div class="test-result" data-test-result></div>
+            <p class="tester-hint">The request goes directly from your browser to ${esc(p.vendor)}. The key is held in memory only and cleared when this panel closes. Providers may block browser requests via CORS; that does not mean your key is invalid.</p>`;
+        })()}
       </div>
     </div>
 
     <div class="p-meta">
-      <span>verified ${esc(fmtDate(p.verified))}</span>
+      <span>verified ${esc(fmtDate(p.verified))}${daysSince(p.verified) > STALE_AFTER_DAYS ? " · review due" : ""}</span>
       <span>confidence: ${esc(p.confidence)}</span>
       <span>id: ${esc(p.id)}</span>
     </div>`;
@@ -567,12 +589,19 @@ function closePanel() {
   const keyInput = el.panelBody.querySelector("[data-key-input]");
   if (keyInput) keyInput.value = "";
   el.panelBody.innerHTML = "";
+  keyTestController?.abort();
+  keyTestController = null;
   history.replaceState(null, "", location.pathname + location.search);
+  const opener = panelOpener?.isConnected ? panelOpener :
+    [...document.querySelectorAll(".card[data-id], tr[data-id]")].find((item) => item.dataset.id === panelOpenerId);
+  if (opener?.isConnected) opener.focus({ preventScroll: true });
+  panelOpener = null;
+  panelOpenerId = null;
 }
 
 /* ---------- key tester ---------- */
 
-async function testKey(provider, key) {
+async function testKey(provider, key, endpoint) {
   const result = el.panelBody.querySelector("[data-test-result]");
   const btn = el.panelBody.querySelector("[data-test]");
   if (!result || !btn) return;
@@ -583,15 +612,17 @@ async function testKey(provider, key) {
   };
 
   if (!key) { show("err", "Enter a key first."); return; }
+  if (!endpoint) { show("err", "This provider cannot be safely tested with the generic browser check."); return; }
 
   btn.disabled = true;
   show("busy", "Contacting provider…");
 
   const controller = new AbortController();
+  keyTestController = controller;
   const timer = setTimeout(() => controller.abort(), 12000);
 
   try {
-    const res = await fetch(`${provider.apiBase}/models`, {
+    const res = await fetch(endpoint, {
       method: "GET",
       headers: { Authorization: `Bearer ${key}` },
       signal: controller.signal
@@ -621,6 +652,7 @@ async function testKey(provider, key) {
     }
   } finally {
     clearTimeout(timer);
+    if (keyTestController === controller) keyTestController = null;
     btn.disabled = false;
   }
 }
@@ -640,8 +672,10 @@ function exportCsv() {
     "openai_compatible", "credit_card_required", "regions", "api_base", "signup", "docs", "verified", "confidence"];
 
   const cell = (v) => {
-    const s = String(v ?? "");
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    let s = String(v ?? "");
+    // Neutralise spreadsheet formula injection (cells starting with = + - @).
+    if (/^[=+\-@]/.test(s)) s = `'${s}`;
+    return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
 
   const rows = [cols.join(",")];
@@ -654,13 +688,18 @@ function exportCsv() {
     ].map(cell).join(","));
   }
 
-  const blob = new Blob([rows.join("\n")], { type: "text/csv;charset=utf-8" });
+  // BOM so Excel opens the UTF-8 file (·, —, CJK model names) correctly; CRLF per RFC 4180.
+  const blob = new Blob(["\uFEFF", rows.join("\r\n")], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
   a.download = `freetier-radar-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.hidden = true;
+  document.body.appendChild(a); // Firefox ignores clicks on detached anchors
   a.click();
-  URL.revokeObjectURL(url);
+  a.remove();
+  // Revoking synchronously can cancel the download before it starts.
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 /* ---------- events ---------- */
@@ -725,7 +764,7 @@ function wireEvents() {
       return;
     }
     const card = e.target.closest(".card");
-    if (card) openPanel(card.dataset.id);
+    if (card) openPanel(card.dataset.id, true, card);
   });
 
   el.grid.addEventListener("keydown", (e) => {
@@ -733,17 +772,17 @@ function wireEvents() {
     const card = e.target.closest(".card");
     if (!card || e.target.closest("[data-fav]")) return;
     e.preventDefault();
-    openPanel(card.dataset.id);
+    openPanel(card.dataset.id, true, card);
   });
 
   el.tableBody.addEventListener("click", (e) => {
     const row = e.target.closest("tr[data-id]");
-    if (row) openPanel(row.dataset.id);
+    if (row) openPanel(row.dataset.id, true, row);
   });
   el.tableBody.addEventListener("keydown", (e) => {
     if (e.key !== "Enter") return;
     const row = e.target.closest("tr[data-id]");
-    if (row) openPanel(row.dataset.id);
+    if (row) openPanel(row.dataset.id, true, row);
   });
 
   el.panelClose.addEventListener("click", closePanel);
@@ -783,14 +822,16 @@ function wireEvents() {
     const test = e.target.closest("[data-test]");
     if (test && activeProvider) {
       const input = el.panelBody.querySelector("[data-key-input]");
-      testKey(activeProvider, input?.value.trim() || "");
+      const support = keyTestSupport(activeProvider, location.protocol);
+      testKey(activeProvider, input?.value.trim() || "", support.endpoint);
     }
   });
 
   el.panelBody.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && e.target.matches("[data-key-input]") && activeProvider) {
       e.preventDefault();
-      testKey(activeProvider, e.target.value.trim());
+      const support = keyTestSupport(activeProvider, location.protocol);
+      testKey(activeProvider, e.target.value.trim(), support.endpoint);
     }
   });
 
@@ -848,11 +889,16 @@ async function boot() {
     const res = await fetch(DATA_URL, { cache: "no-cache" });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
-    state.all = Array.isArray(json.providers) ? json.providers : [];
-    state.meta = json.meta || {};
+    const { providers, meta, warnings, fatal } = loadDataset(json);
+    if (fatal.length) throw new Error(fatal.join(" "));
+    // A single malformed entry is skipped rather than taking the whole index down.
+    if (warnings.length) console.warn(`Dataset has ${warnings.length} problem(s):\n${warnings.join("\n")}`);
+    state.all = providers;
+    state.meta = meta;
   } catch (err) {
     console.error("Dataset load failed:", err);
     el.loadError.hidden = false;
+    el.loadErrorMessage.textContent = `The provider dataset could not be loaded or is invalid: ${err.message}`;
     el.resultCount.textContent = "dataset unavailable";
     return;
   }
@@ -865,9 +911,18 @@ async function boot() {
   const params = new URLSearchParams(location.search);
   setView(params.get("view"));
 
-  // deep link: #groq
-  const id = location.hash.replace(/^#/, "");
-  if (id && state.all.some((p) => p.id === id)) openPanel(id, false);
+  // deep link: #groq — also follow later hash changes (links, back/forward)
+  syncPanelToHash();
+  window.addEventListener("hashchange", syncPanelToHash);
+}
+
+function syncPanelToHash() {
+  const id = decodeURIComponent(location.hash.replace(/^#/, ""));
+  if (id && state.all.some((p) => p.id === id)) {
+    if (activeProvider?.id !== id) openPanel(id, false);
+  } else if (!el.panel.hidden) {
+    closePanel();
+  }
 }
 
 boot();
